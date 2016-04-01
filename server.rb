@@ -1,70 +1,55 @@
 #!/usr/bin/env ruby
 
-require './mail.rb'
-require './mailtoken.rb'
-require './authtoken.rb'
+require 'rubygems'
+require 'bundler/setup'
 
 require 'sinatra/base'
-require 'thread/pool'
-require 'json/jwt'
-require 'httparty'
+require 'sinatra/json'
+require 'jwt'
+require 'mock_redis'
+require 'openssl'
+require 'base64'
 
-module Letsauth
-    class Backend < Sinatra::Application
+class LetsAuth < Sinatra::Application
+  configure do
+    set :redis, MockRedis.new
 
-        # to prevent worrying about databases, this global hash will allow to keep the confirmed mails
-        # TODO: This needs a timeout
-        class << self; attr_accessor :mails end
-        # Place to store the additional information needed, like the origin
-        class << self; attr_accessor :authData end
-        # threadpool for background tasks, like sending mails
-        class << self; attr_accessor :pool end
-        # helper variable, the url of this LA instance
-        class << self; attr_accessor :serverURL end
-        # private key for authToken signature
-        class << self; attr_accessor :private_key end
-        @mails = {}
-        @authData = {}
-        @pool = Thread.pool(2)
-        @serverURL = "http://localhost:9292/"
+    # FIXME: Attempt to read persistent key from disk.
+    # Generate ephemeral keys as a fallback.
+    puts 'Generating ephemeral keypair...'
+    set :privkey, OpenSSL::PKey::RSA.generate(2048)
+    set :pubkey, settings.privkey.public_key
+  end
 
+  get '/' do
+    'Hello, World'
+  end
 
-        configure do
-            if File.exists?('private_key')
-                Backend::private_key = OpenSSL::PKey::EC.new(File.read('private_key'))
-            else
-                Backend::private_key = OpenSSL::PKey::EC.new('secp521r1').generate_key
-                File.write('private_key', Backend::private_key.to_pem)
-                # Aso generate public key, see https://github.com/ruby/openssl/issues/29 for why this sucks so much
-                point = Backend::private_key.public_key
-                pub = OpenSSL::PKey::EC.new(point.group)
-                pub.public_key = point
-                File.write('public/public_key', pub.to_pem)
-            end
-        end
+  get '/.well-known/openid-configuration' do
+    # FIXME: Make configurable + add remaining necessary keys. More info at:
+    #   https://github.com/letsauth/oidc-prototype/issues/3
+    #   https://accounts.google.com/.well-known/openid-configuration
+    json ({
+      :issuer => 'https://example.invalid',
+      :authorization_endpoint => 'https://example.invalid/oauth2/auth',
+      :jwks_uri => 'https://example.invalid/meta/jwks'
+    })
+  end
 
-        post '/confirm' do
-            headers 'Access-Control-Allow-Origin' => '*'
-            # The RP asks a mail to be confirmed
-            Backend::authData[params[:mail]] = {:session_id => params[:session_id], :origin => request.env['HTTP_ORIGIN']}
-            Mail.new(params[:mail]).confirm
-        end
+  get '/oauth2/auth' do
+    'FIXME: Implement this endpoint.'
+  end
 
-        get '/mailConfirm' do
-            # If user clicks on the link in the confirmation mail, he and his token end here
-            mail = params[:mail]
-            if Mail.new(mail).confirmToken(params[:token])
-                authToken = AuthToken.new(origin: Backend::authData[mail][:origin], mail: params[:mail], nonce: Backend::authData[mail][:session_id])
-                Backend::authData.delete(mail)
-
-                # The auth token has to be formated as in the specs: "The value of the id_token parameter is the ID Token, which is a signed JWT, containing three base64url encoded segments separated by period ('.') characters". The JWT gem shall take care of that in AuthToken.to_s                
-                HTTParty.post(authToken.aud + '/la_validate', {:body => {"id_token" => authToken.to_s}})
-                
-                return "Login confirmed"
-            else
-                return "Something went wrong (invalid token?)"
-            end
-        end
-        
-    end
+  get '/meta/jwks' do
+    json ({
+      :keys => [{
+        :kty => 'RSA',
+        :alg => 'RS256',
+        :use => 'sig',
+        :kid => 'FIXME -- Generate a unique key id',
+        :n => Base64.urlsafe_encode64([settings.pubkey.params['n'].to_s(16)].pack('H*')).gsub(/=*$/, ''),
+        :e => Base64.urlsafe_encode64([settings.pubkey.params['e'].to_s(16)].pack('H*')).gsub(/=*$/, '')
+      }]
+    })
+  end
 end

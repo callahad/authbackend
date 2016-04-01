@@ -1,7 +1,6 @@
 require 'rubygems'
-require 'bundler'
+require 'bundler/setup'
 
-Bundler.require
+require './server'
 
-require './server.rb'
-run Letsauth::Backend.new
+run LetsAuth

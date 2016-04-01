@@ -1,7 +1,8 @@
 source 'https://rubygems.org'
+
 gem 'sinatra'
+gem 'sinatra-contrib'
+gem 'jwt'
+gem 'mock_redis'
+gem 'json'
 gem 'puma'
-gem 'thread'
-gem 'pony'
-gem 'json-jwt'
-gem 'httparty', '~> 0.13.7'
