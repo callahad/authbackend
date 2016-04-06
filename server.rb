@@ -51,29 +51,20 @@ class LetsAuth < Sinatra::Application
   end
 
   get '/oauth2/auth' do
-    # Parse from application/x-www-form-urlencoded serialization of query args
-    'FIXME: Implement this endpoint.'
+    # Data from query args, encoded as application/x-www-form-urlencoded
+    handle_oauth2(params)
   end
 
   post '/oauth2/auth' do
-    # Parse from application/x-www-form-urlencoded serialization of request body
-    'FIXME: Implement this endpoint.'
+    # Data from request body, encoded as application/x-www-form-urlencoded
+    # TODO: Verify correct incoming Content-Type
+    handle_oauth2(params)
   end
 
-  def handle_oauth2(&params)
+  def handle_oauth2(params = {})
     # See: http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
     #
-    # OAuth Parameters:
-    #   scope: Fail if array doesn't include 'openid'. Ignore all other members.
-    #   response_type: Fail if not `id_token`.
-    #   client_id: Let's use the RP's origin. E.g., https://example.com:12443
-    #   redirect_uri: Must be within the RP's origin. Plus further validations.
-    #   state: Opaque value. Reflect it back to the RP in response args
-    #   response_mode: Ignore it. Spec requires that id_token uses 'fragment'
-    #
-    # OpenID Connect Parameters:
-    #   nonce: Opaque value. Reflect it back to the RP inside the id_token.
-    #   display: Ignore it.
+    # Things we don't actually care about, but should add for OIDC compliance:
     #   prompt: Optional, space-delimited string.
     #     Possible values: "none", "login", "consent", or "select_account"
     #
@@ -85,17 +76,66 @@ class LetsAuth < Sinatra::Application
     #     When failing, fail according to Section 3.1.2.6.
     #   max_age: Optional, we'll always re-auth for v1, so we can ignore this.
     #     We must return an "auth_time" claim in the id_token.
-    #   ui_locales: Optional, ignore for now.
     #   id_token_hint: Optional. We won't support it. Fail with "login_required"
-    #   login_hint: Optional, but we want to strongly encourage it.
-    #     Spec says that the value MAY be a phone numbers. No. Reject those.
-    #   acr_value: Optional; ignore it. Too much bureaucratic overhead for us.
-    #   claims: Optional JSON object of requested claims. We don't support this.
-    #     NOTE, we may want to support the email scope and inline its claims
-    #   request: All of the above, rolled up as a JWT. We don't support this.
-    #   request_uri: Ditto, but as a reference to a URI with a JWT. Ignore it.
-    #   registration: Endpoint for RPs to dynamically register with us. Ignore.
-    #     We may need to bring this in if we can't allow unregistered clients.
+
+    unless params[:scope].class == String && params[:scope].split(' ').include?('openid')
+      halt 422, '"scope" parameter must be present and include "openid"'
+    end
+
+    unless params[:response_type].class == String && params[:response_type].split(' ') == ['id_token']
+      halt 422, '"response_type" parameter must be present, and only "id_token" is supported'
+    end
+
+    unless params[:client_id].class == String && valid_origin?(params[:client_id])
+      halt 422, '"client_id" parameter must be present, and a valid HTTP origin'
+    end
+
+    unless params[:redirect_uri].class == String && ok_redirect?(params[:client_id], params[:redirect_uri])
+      halt 422, '"redirect_uri" parameter must be present, and a valid URI within the "client_id" origin'
+    end
+
+    unless params[:response_mode].nil? || params[:response_mode] == 'fragment'
+      halt 422, 'invalid "response_mode", only "fragment" is supported'
+    end
+
+    response_params = {}
+
+    if params[:state]
+      response_params[:state] = params[:state]
+    end
+
+    token_params = {}
+
+    if params[:nonce]
+      token_params[:nonce] = params[:nonce]
+    end
+
+    if params[:login_hint]
+      unless valid_email?(params[:login_hint])
+        # TODO: What protocol? acct:, mailto:, or none? Update error message.
+        halt 422, 'invalid "login_hint", parameter must be a valid email address'
+      end
+    else 
+      # FIXME: Implement this
+      halt 501, 'authentication without a "login_hint" is not yet supported'
+    end
+
+    halt 501, 'authentication is not yet implemented'
+  end
+
+  def valid_origin?(origin)
+    # FIXME: Implement this
+    return true
+  end
+
+  def ok_redirect?(origin,uri)
+    # FIXME: Implement this
+    return true
+  end
+
+  def valid_email?(email)
+    # FIXME: Implement this
+    return true
   end
 
   get '/oidc/jwks' do
