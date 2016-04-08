@@ -6,13 +6,22 @@ require 'bundler/setup'
 require 'base64'
 require 'digest/sha1'
 require 'openssl'
+require 'uri'
 
 require 'jwt'
 require 'mock_redis'
 require 'sinatra/base'
 require 'sinatra/json'
+require 'sinatra/multi_route'
+require 'sinatra/reloader'
 
 class LetsAuth < Sinatra::Application
+  register Sinatra::MultiRoute
+
+  configure :development do
+    register Sinatra::Reloader
+  end
+
   configure do
     set :redis, MockRedis.new
 
@@ -50,18 +59,7 @@ class LetsAuth < Sinatra::Application
     })
   end
 
-  get '/oauth2/auth' do
-    # Data from query args, encoded as application/x-www-form-urlencoded
-    handle_oauth2(params)
-  end
-
-  post '/oauth2/auth' do
-    # Data from request body, encoded as application/x-www-form-urlencoded
-    # TODO: Verify correct incoming Content-Type
-    handle_oauth2(params)
-  end
-
-  def handle_oauth2(params = {})
+  route :get, :post, '/oauth2/auth' do
     # See: http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
     #
     # Things we don't actually care about, but should add for OIDC compliance:
@@ -87,7 +85,7 @@ class LetsAuth < Sinatra::Application
     end
 
     unless params[:client_id].class == String && valid_origin?(params[:client_id])
-      halt 422, '"client_id" parameter must be present, and a valid HTTP origin'
+      halt 422, '"client_id" parameter must be present, must be a valid HTTP origin, and must match the Origin HTTP header'
     end
 
     unless params[:redirect_uri].class == String && ok_redirect?(params[:client_id], params[:redirect_uri])
@@ -124,7 +122,10 @@ class LetsAuth < Sinatra::Application
   end
 
   def valid_origin?(origin)
-    # FIXME: Implement this
+    if origin != request.env['HTTP_ORIGIN'] # The 'Origin: ...' header
+      return false
+    end
+
     return true
   end
 
@@ -134,8 +135,12 @@ class LetsAuth < Sinatra::Application
   end
 
   def valid_email?(email)
-    # FIXME: Implement this
-    return true
+    # If it's good enough for Michael Hartl...
+    # https://www.railstutorial.org/book/_single-page#sec-format_validation
+    # For v1, we'll want a library with an actual parser and/or DNS checks.
+    # In node.js, https://github.com/hapijs/isemail is a good option.
+    valid_email_regex = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+    return email =~ valid_email_regex
   end
 
   get '/oidc/jwks' do
