@@ -121,17 +121,14 @@ class LetsAuth < Sinatra::Application
     halt 501, 'authentication is not yet implemented'
   end
 
-  def valid_origin?(origin)
-    if origin != request.env['HTTP_ORIGIN'] # The 'Origin: ...' header
-      return false
-    end
-
-    return true
+  def valid_origin?(client_id)
+    # For v1, we'll want something more rigorous / well thought out here
+    client_id == request.env['HTTP_ORIGIN'] # The 'Origin: ...' header
   end
 
   def ok_redirect?(origin,uri)
     # FIXME: Implement this
-    return true
+    true
   end
 
   def valid_email?(email)
@@ -140,7 +137,7 @@ class LetsAuth < Sinatra::Application
     # For v1, we'll want a library with an actual parser and/or DNS checks.
     # In node.js, https://github.com/hapijs/isemail is a good option.
     valid_email_regex = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
-    return email =~ valid_email_regex
+    email =~ valid_email_regex
   end
 
   get '/oidc/jwks' do
