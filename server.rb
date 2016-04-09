@@ -31,7 +31,8 @@ class LetsAuth < Sinatra::Application
     set :privkey, OpenSSL::PKey::RSA.generate(2048)
     set :pubkey, settings.privkey.public_key
 
-    set :origin, 'https://example.invalid'
+    # TODO: Allow alternative public-facing ports, or require 443?
+    set :host, 'example.invalid'
   end
 
   get '/' do
@@ -42,9 +43,9 @@ class LetsAuth < Sinatra::Application
     # Parameters from the OpenID Connect Discovery 1.0 spec at:
     # http://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
     json ({
-      'issuer'                 => settings.origin,
-      'authorization_endpoint' => settings.origin + '/oauth2/auth',
-      'jwks_uri'               => settings.origin + '/oidc/jwks',
+      'issuer'                 => "https://#{settings.host}",
+      'authorization_endpoint' => "https://#{settings.host}/oauth2/auth",
+      'jwks_uri'               => "https://#{settings.host}/oidc/jwks",
       'scopes_supported' => ['openid'],
       'response_types_supported' => ['id_token'],
       'response_modes_supported' => ['fragment'],
