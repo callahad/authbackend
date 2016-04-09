@@ -124,11 +124,33 @@ class LetsAuth < Sinatra::Application
 
   def valid_origin?(client_id)
     # For v1, we'll want something more rigorous / well thought out here
+    uri = URI.parse(client_id)
+
+    return false if uri.to_s != client_id
+    return false if uri.userinfo || !uri.path.empty? || uri.query || uri.fragment
+    return false unless uri.scheme && uri.host && uri.port
+
     client_id == request.env['HTTP_ORIGIN'] # The 'Origin: ...' header
   end
 
-  def ok_redirect?(origin,uri)
-    # FIXME: Implement this
+  def ok_redirect?(origin,redirect)
+    # For v1, we'll want a much more rigorous, tested validator here
+
+    # TODO: I think there's something in the spec about how we're supposed to
+    # handle query args and/or fragments in the redirect_uri. Mirror them?
+    # For now, fail if they exist.
+
+    o_uri = URI.parse(origin)
+    r_uri = URI.parse(redirect)
+
+    return false if r_uri.to_s != redirect
+    return false if r_uri.userinfo || r_uri.query || r_uri.fragment
+    return false unless r_uri.scheme && r_uri.host && r_uri.port
+
+    return false unless r_uri.scheme == o_uri.scheme &&
+                        r_uri.host == o_uri.host &&
+                        r_uri.port == o_uri.port
+
     true
   end
 
