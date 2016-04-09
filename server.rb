@@ -5,6 +5,7 @@ require 'bundler/setup'
 
 require 'base64'
 require 'cgi'
+require 'date'
 require 'digest/sha1'
 require 'openssl'
 require 'uri'
@@ -30,7 +31,9 @@ class LetsAuth < Sinatra::Application
     # Generate ephemeral keys as a fallback.
     puts 'Generating ephemeral keypair...'
     set :privkey, OpenSSL::PKey::RSA.generate(2048)
+    puts settings.privkey
     set :pubkey, settings.privkey.public_key
+    puts settings.pubkey
 
     # TODO: Allow alternative public-facing ports, or require 443?
     set :host, 'example.invalid'
@@ -98,18 +101,6 @@ class LetsAuth < Sinatra::Application
       halt 422, 'invalid "response_mode", only "fragment" is supported'
     end
 
-    response_params = {}
-
-    if params[:state]
-      response_params[:state] = params[:state]
-    end
-
-    token_params = {}
-
-    if params[:nonce]
-      token_params[:nonce] = params[:nonce]
-    end
-
     if params[:login_hint]
       unless valid_email?(params[:login_hint])
         # TODO: What protocol? acct:, mailto:, or none? Update error message.
@@ -120,8 +111,12 @@ class LetsAuth < Sinatra::Application
       halt 501, 'authentication without a "login_hint" is not yet supported'
     end
 
-    puts "Return URL is: " +
-    stage(params[:login_hint], params[:client_id], params[:redirect_uri])
+    confirmation_url = stage(
+      params[:login_hint], params[:client_id], params[:redirect_uri],
+      :nonce => params[:nonce], :state => params[:state]
+    )
+
+    puts "Confirmation URL is: #{confirmation_url}"
 
     return 200, "Please check your email at #{params[:login_hint]}"
   end
@@ -167,18 +162,22 @@ class LetsAuth < Sinatra::Application
     email =~ valid_email_regex
   end
 
-  def stage(email, origin, redirect)
+  def stage(email, origin, redirect, options = {})
     redis = settings.redis
 
     code = gen_code()
 
     key = "#{email}:#{origin}"
 
+    kv_array = []
+    kv_array.push 'redirect', redirect
+    kv_array.push 'code', code
+    kv_array.push 'tries', 0
+    kv_array.push 'nonce', options[:nonce] if options[:nonce]
+    kv_array.push 'state', options[:state] if options[:state]
+
     redis.multi do
-      redis.hmset key,
-        'redirect', redirect,
-        'code', code,
-        'tries', 0
+      redis.hmset key, *kv_array
       redis.expire key, 60 * 15
     end
 
@@ -219,9 +218,29 @@ class LetsAuth < Sinatra::Application
 
     redis.del key
 
-    # FIXME: Sign and append JWT to redirect_uri, also make sure to pass through
-    # state as a query arg and nonce inside the jwt
-    redirect data['redirect'], 302
+    id_token = build_id_token(params[:email], params[:origin], data['nonce'])
+
+    base_uri = data['redirect'] + '#id_token=' + id_token
+    base_uri += '&state=' + data['state'] if data['state']
+    redirect base_uri, 302
+  end
+
+  def build_id_token(email, origin, nonce = nil)
+    now = DateTime::now.strftime('%s').to_i
+    validity = 60 * 10
+
+    payload = {
+      :iss => "https://#{settings.host}",
+      :sub => email,
+      :aud => origin,
+      :exp => now + validity,
+      :iat => now,
+      :auth_time => now,
+    }
+
+    payload[:nonce] = nonce unless nonce.nil?
+
+    JWT.encode payload, settings.privkey, 'RS256'
   end
 
   get '/oidc/jwks' do
