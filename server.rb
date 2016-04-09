@@ -49,8 +49,8 @@ class LetsAuth < Sinatra::Application
 
     json ({
       issuer:                   "https://#{settings.host}",
-      authorization_endpoint:   "https://#{settings.host}/oauth2/auth",
-      jwks_uri:                 "https://#{settings.host}/oidc/jwks",
+      authorization_endpoint:   "https://#{settings.host}/auth",
+      jwks_uri:                 "https://#{settings.host}/jwks.json",
       scopes_supported:         %w{ openid email },
       claims_supported:         %w{ aud email email_verified exp iat iss sub },
       response_types_supported: %w{ id_token },
@@ -66,7 +66,7 @@ class LetsAuth < Sinatra::Application
     })
   end
 
-  route :get, :post, '/oauth2/auth' do
+  route :get, :post, '/auth' do
     # See: http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
 
     unless params[:scope].class == String && params[:scope].split(' ').include?('openid')
@@ -167,7 +167,7 @@ class LetsAuth < Sinatra::Application
 
     URI::HTTPS.build(
       host: settings.host,
-      path: '/verify',
+      path: '/confirm',
       query: "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
     ).to_s
   end
@@ -181,9 +181,9 @@ class LetsAuth < Sinatra::Application
     (0...6).map { charset.to_a[rand(charset.size)] }.join
   end
 
-  get '/verify' do
+  get '/confirm' do
     # For v1, we need to be extremely careful and run these through the same
-    # validations as they should have gone through on input at /oauth2/auth.
+    # validations as they should have gone through on input at /auth.
     # Also, we need to audit the rate limiting, info leaks, etc of this endpoint
     redis = settings.redis
 
@@ -230,7 +230,7 @@ class LetsAuth < Sinatra::Application
     JWT.encode payload, settings.privkey, 'RS256', headers
   end
 
-  get '/oidc/jwks' do
+  get '/jwks.json' do
     json ({
       keys: [{
         kty: 'RSA',
