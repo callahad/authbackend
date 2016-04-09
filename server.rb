@@ -199,7 +199,29 @@ class LetsAuth < Sinatra::Application
   end
 
   get '/verify' do
-    # FIXME: Implement this
+    # For v1, we need to be extremely careful and run these through the same
+    # validations as they should have gone through on input at /oauth2/auth.
+    # Also, we need to audit the rate limiting, info leaks, etc of this endpoint
+    redis = settings.redis
+
+    halt 422, 'Missing or malformed parameters' unless params[:email] && params[:origin] && params[:code]
+
+    key = "#{params[:email]}:#{params[:origin]}"
+
+    data, attempt = redis.multi do
+      redis.hgetall key
+      redis.hincrby key, 'tries', 1
+    end
+
+    halt 401, 'Unknown or expired credentials' if data.empty?
+    halt 401, 'Too many failed attempts' if (attempt > 3)
+    halt 401, 'Incorrect code' unless data['code'] == params[:code].upcase
+
+    redis.del key
+
+    # FIXME: Sign and append JWT to redirect_uri, also make sure to pass through
+    # state as a query arg and nonce inside the jwt
+    redirect data['redirect'], 302
   end
 
   get '/oidc/jwks' do
