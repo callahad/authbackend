@@ -4,6 +4,7 @@ require 'rubygems'
 require 'bundler/setup'
 
 require 'base64'
+require 'cgi'
 require 'digest/sha1'
 require 'openssl'
 require 'uri'
@@ -119,7 +120,10 @@ class LetsAuth < Sinatra::Application
       halt 501, 'authentication without a "login_hint" is not yet supported'
     end
 
-    halt 501, 'authentication is not yet implemented'
+    puts "Return URL is: " +
+    stage(params[:login_hint], params[:client_id], params[:redirect_uri])
+
+    return 200, "Please check your email at #{params[:login_hint]}"
   end
 
   def valid_origin?(client_id)
@@ -161,6 +165,41 @@ class LetsAuth < Sinatra::Application
     # In node.js, https://github.com/hapijs/isemail is a good option.
     valid_email_regex = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
     email =~ valid_email_regex
+  end
+
+  def stage(email, origin, redirect)
+    redis = settings.redis
+
+    code = gen_code()
+
+    key = "#{email}:#{origin}"
+
+    redis.multi do
+      redis.hmset key,
+        'redirect', redirect,
+        'code', code,
+        'tries', 0
+      redis.expire key, 60 * 15
+    end
+
+    URI::HTTPS.build(
+      :host => settings.host,
+      :path => '/verify',
+      :query => "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
+    ).to_s
+  end
+
+  def gen_code()
+    # For v1, we'll want to use a real CSPRNG and such.
+    # We'll also want to calculate the entropy of each code.
+    # Lastly, thanks Stack Overflow:
+    # http://stackoverflow.com/questions/88311/how-best-to-generate-a-random-string-in-ruby#answer-493230
+    charset = %w{ 2 3 4 6 7 9 A C D E F G H J K M N P Q R T V W X Y Z }
+    (0...6).map { charset.to_a[rand(charset.size)] }.join
+  end
+
+  get '/verify' do
+    # FIXME: Implement this
   end
 
   get '/oidc/jwks' do
