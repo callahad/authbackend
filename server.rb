@@ -95,7 +95,8 @@ class LetsAuth < Sinatra::Application
         halt 422, 'invalid "login_hint", parameter must be a valid email address'
       end
     else 
-      # FIXME: Implement this
+      # FIXME: Implement this. Note that any re-submission won't have an Origin
+      # header matching the third party website...
       halt 501, 'authentication without a "login_hint" is not yet supported'
     end
 
