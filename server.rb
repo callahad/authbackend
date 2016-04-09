@@ -27,8 +27,8 @@ class LetsAuth < Sinatra::Application
   configure do
     set :redis, MockRedis.new
 
-    # FIXME: Attempt to read persistent key from disk, env vars, or something.
-    # Generate ephemeral keys as a fallback.
+    # For v1, maybe read persistent key from disk / env? Generated as fallback?
+    # Or maybe we want to automatically do key rotation, instead?
     puts 'Generating ephemeral keypair...'
     set :privkey, OpenSSL::PKey::RSA.generate(2048)
     puts settings.privkey
@@ -45,23 +45,22 @@ class LetsAuth < Sinatra::Application
   end
 
   get '/.well-known/openid-configuration' do
-    # Parameters from the OpenID Connect Discovery 1.0 spec at:
-    # http://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
     json ({
-      'issuer'                 => "https://#{settings.host}",
-      'authorization_endpoint' => "https://#{settings.host}/oauth2/auth",
-      'jwks_uri'               => "https://#{settings.host}/oidc/jwks",
-      'scopes_supported' => ['openid'],
-      'response_types_supported' => ['id_token'],
-      'response_modes_supported' => ['fragment'],
-      'grant_types_supported' => ['implicit'],
-      'subject_types_supported' => ['public'],
-      'id_token_signing_alg_values_supported' => ['RS256'],
+      issuer:                   "https://#{settings.host}",
+      authorization_endpoint:   "https://#{settings.host}/oauth2/auth",
+      jwks_uri:                 "https://#{settings.host}/oidc/jwks",
+      scopes_supported:         %w{ openid email },
+      claims_supported:         %w{ aud email email_verified exp iat iss sub },
+      response_types_supported: %w{ id_token },
+      response_modes_supported: %w{ fragment },
+      grant_types_supported:    %w{ implicit },
+      subject_types_supported:  %w{ public },
+      id_token_signing_alg_values_supported: %w{ RS256 },
 
       # TODO: Include this documentation with the daemon, eventually.
-      #'service_documentation' => '',
-      #'op_policy_uri' => '',
-      #'op_tos_uri' => '',
+      #service_documentation: '',
+      #op_policy_uri: '',
+      #op_tos_uri: '',
     })
   end
 
@@ -114,7 +113,7 @@ class LetsAuth < Sinatra::Application
 
     confirmation_url = stage(
       params[:login_hint], params[:client_id], params[:redirect_uri],
-      :nonce => params[:nonce], :state => params[:state]
+      nonce: params[:nonce], state: params[:state]
     )
 
     puts "Confirmation URL is: #{confirmation_url}"
@@ -183,9 +182,9 @@ class LetsAuth < Sinatra::Application
     end
 
     URI::HTTPS.build(
-      :host => settings.host,
-      :path => '/verify',
-      :query => "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
+      host: settings.host,
+      path: '/verify',
+      query: "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
     ).to_s
   end
 
@@ -231,12 +230,13 @@ class LetsAuth < Sinatra::Application
     validity = 60 * 10
 
     payload = {
-      :iss => "https://#{settings.host}",
-      :sub => email,
-      :aud => origin,
-      :exp => now + validity,
-      :iat => now,
-      :auth_time => now,
+      aud: origin,
+      email: email,
+      email_verified: email,
+      exp: now + validity,
+      iat: now,
+      iss: "https://#{settings.host}",
+      sub: email,
     }
 
     payload[:nonce] = nonce unless nonce.nil?
@@ -248,13 +248,13 @@ class LetsAuth < Sinatra::Application
 
   get '/oidc/jwks' do
     json ({
-      'keys' => [{
-        'kty' => 'RSA',
-        'alg' => 'RS256',
-        'use' => 'sig',
-        'kid' => settings.kid,
-        'n' => Base64.urlsafe_encode64([settings.pubkey.params['n'].to_s(16)].pack('H*')).gsub(/=*$/, ''),
-        'e' => Base64.urlsafe_encode64([settings.pubkey.params['e'].to_s(16)].pack('H*')).gsub(/=*$/, '')
+      keys: [{
+        kty: 'RSA',
+        alg: 'RS256',
+        use: 'sig',
+        kid: settings.kid,
+        n: Base64.urlsafe_encode64([settings.pubkey.params['n'].to_s(16)].pack('H*')).gsub(/=*$/, ''),
+        e: Base64.urlsafe_encode64([settings.pubkey.params['e'].to_s(16)].pack('H*')).gsub(/=*$/, '')
       }]
     })
   end
