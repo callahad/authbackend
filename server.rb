@@ -34,6 +34,7 @@ class LetsAuth < Sinatra::Application
     puts settings.privkey
     set :pubkey, settings.privkey.public_key
     puts settings.pubkey
+    set :kid, Digest::SHA1.hexdigest(settings.pubkey.to_s)
 
     # TODO: Allow alternative public-facing ports, or require 443?
     set :host, 'example.invalid'
@@ -240,7 +241,9 @@ class LetsAuth < Sinatra::Application
 
     payload[:nonce] = nonce unless nonce.nil?
 
-    JWT.encode payload, settings.privkey, 'RS256'
+    headers = {}
+    headers[:kid] = settings.kid if settings.kid
+    JWT.encode payload, settings.privkey, 'RS256', headers
   end
 
   get '/oidc/jwks' do
@@ -249,7 +252,7 @@ class LetsAuth < Sinatra::Application
         'kty' => 'RSA',
         'alg' => 'RS256',
         'use' => 'sig',
-        'kid' => Digest::SHA1.hexdigest(settings.pubkey.to_s),
+        'kid' => settings.kid,
         'n' => Base64.urlsafe_encode64([settings.pubkey.params['n'].to_s(16)].pack('H*')).gsub(/=*$/, ''),
         'e' => Base64.urlsafe_encode64([settings.pubkey.params['e'].to_s(16)].pack('H*')).gsub(/=*$/, '')
       }]
