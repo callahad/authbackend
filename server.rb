@@ -45,6 +45,8 @@ class LetsAuth < Sinatra::Application
   end
 
   get '/.well-known/openid-configuration' do
+    # See: http://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+
     json ({
       issuer:                   "https://#{settings.host}",
       authorization_endpoint:   "https://#{settings.host}/oauth2/auth",
@@ -66,20 +68,6 @@ class LetsAuth < Sinatra::Application
 
   route :get, :post, '/oauth2/auth' do
     # See: http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
-    #
-    # Things we don't actually care about, but should add for OIDC compliance:
-    #   prompt: Optional, space-delimited string.
-    #     Possible values: "none", "login", "consent", or "select_account"
-    #
-    #     Generally, these don't make sense for us, since we don't have durable
-    #     state at the daemon. We could support some of these options in the
-    #     future, but it probably doesn't make sense for v1. So, ignore this.
-    #
-    #     Also: "none" in combination any other option is an error; fail.
-    #     When failing, fail according to Section 3.1.2.6.
-    #   max_age: Optional, we'll always re-auth for v1, so we can ignore this.
-    #     We must return an "auth_time" claim in the id_token.
-    #   id_token_hint: Optional. We won't support it. Fail with "login_required"
 
     unless params[:scope].class == String && params[:scope].split(' ').include?('openid')
       halt 422, '"scope" parameter must be present and include "openid"'
@@ -134,10 +122,6 @@ class LetsAuth < Sinatra::Application
 
   def ok_redirect?(origin,redirect)
     # For v1, we'll want a much more rigorous, tested validator here
-
-    # TODO: I think there's something in the spec about how we're supposed to
-    # handle query args and/or fragments in the redirect_uri. Mirror them?
-    # For now, fail if they exist.
 
     o_uri = URI.parse(origin)
     r_uri = URI.parse(redirect)
