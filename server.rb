@@ -21,11 +21,6 @@ require 'sinatra/reloader'
 class LetsAuth < Sinatra::Application
   register Sinatra::MultiRoute
 
-  configure :development do
-    register Sinatra::Reloader
-    Pony.override_options = { :via => :test }
-  end
-
   configure do
     set :redis, MockRedis.new
 
@@ -38,8 +33,17 @@ class LetsAuth < Sinatra::Application
     puts settings.pubkey
     set :kid, Digest::SHA1.hexdigest(settings.pubkey.to_s)
 
-    # TODO: Allow alternative public-facing ports, or require 443?
+    set :scheme, 'https'
     set :host, 'example.invalid'
+    set :port, 443
+  end
+
+  configure :development do
+    register Sinatra::Reloader
+    set :scheme, 'http'
+    set :host, '127.0.0.1'
+    set :port, 9292
+    Pony.override_options = { :via => :test }
   end
 
   get '/' do
@@ -50,9 +54,9 @@ class LetsAuth < Sinatra::Application
     # See: http://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
 
     json ({
-      issuer:                   "https://#{settings.host}",
-      authorization_endpoint:   "https://#{settings.host}/auth",
-      jwks_uri:                 "https://#{settings.host}/jwks.json",
+      issuer:                   "#{settings.scheme}://#{settings.host}",
+      authorization_endpoint:   "#{settings.scheme}://#{settings.host}/auth",
+      jwks_uri:                 "#{settings.scheme}://#{settings.host}/jwks.json",
       scopes_supported:         %w{ openid email },
       claims_supported:         %w{ aud email email_verified exp iat iss sub },
       response_types_supported: %w{ id_token },
@@ -168,8 +172,11 @@ class LetsAuth < Sinatra::Application
       redis.expire key, 60 * 15
     end
 
-    URI::HTTPS.build(
+    builder = settings.scheme == 'http' ? URI::HTTP : URI::HTTPS
+
+    builder.build(
       host: settings.host,
+      port: settings.port,
       path: '/confirm',
       query: "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
     ).to_s
@@ -235,7 +242,7 @@ class LetsAuth < Sinatra::Application
       email_verified: email,
       exp: now + validity,
       iat: now,
-      iss: "https://#{settings.host}",
+      iss: "#{settings.scheme}://#{settings.host}",
       sub: email,
     }
 
