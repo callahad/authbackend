@@ -25,10 +25,13 @@ class LetsAuth < Sinatra::Application
   configure do
     set :redis, MockRedis.new
 
-    # For v1, maybe read persistent key from disk / env? Generated as fallback?
-    # Or maybe we want to automatically do key rotation, instead?
-    puts 'Generating ephemeral keypair...'
-    set :privkey, OpenSSL::PKey::RSA.generate(2048)
+    if ENV['LETSAUTH_PRIVATE_KEY'] then
+      puts 'Loading keypair from environment...'
+      set :privkey, OpenSSL::PKey::RSA.new(ENV['LETSAUTH_PRIVATE_KEY'])
+    else
+      puts 'Generating ephemeral keypair...'
+      set :privkey, OpenSSL::PKey::RSA.generate(2048)
+    end
     puts settings.privkey
     set :pubkey, settings.privkey.public_key
     puts settings.pubkey
