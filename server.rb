@@ -12,6 +12,7 @@ require 'uri'
 
 require 'jwt'
 require 'mock_redis'
+require 'pony'
 require 'sinatra/base'
 require 'sinatra/json'
 require 'sinatra/multi_route'
@@ -22,6 +23,7 @@ class LetsAuth < Sinatra::Application
 
   configure :development do
     register Sinatra::Reloader
+    Pony.override_options = { :via => :test }
   end
 
   configure do
@@ -105,7 +107,7 @@ class LetsAuth < Sinatra::Application
       nonce: params[:nonce], state: params[:state]
     )
 
-    puts "Confirmation URL is: #{confirmation_url}"
+    send_link(params[:login_hint], params[:client_id], confirmation_url)
 
     return 200, "Please check your email at #{params[:login_hint]}"
   end
@@ -171,6 +173,19 @@ class LetsAuth < Sinatra::Application
       path: '/confirm',
       query: "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
     ).to_s
+  end
+
+  def send_link(who, where, what)
+    message = Pony.mail(
+      to: who,
+      from: "no-reply@#{settings.host}",
+      subject: "Finish logging into #{where}",
+      body: "Click this link to finish logging in:\n\n#{what}"
+    )
+
+    puts '-----BEGIN EMAIL MESSAGE-----'
+    puts message.to_s
+    puts '-----END EMAIL MESSAGE-----'
   end
 
   def gen_code()
