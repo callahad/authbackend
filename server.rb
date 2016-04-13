@@ -37,6 +37,9 @@ class LetsAuth < Sinatra::Application
     set :scheme, 'https'
     set :host, 'example.invalid'
     set :port, 443
+
+    # Note: From `heroku labs:enable runtime-dyno-metadata`
+    set :host, "#{ENV['HEROKU_APP_NAME']}.herokuapp.com" if ENV['HEROKU_APP_NAME']
   end
 
   configure :development do
