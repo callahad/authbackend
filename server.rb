@@ -8,6 +8,7 @@ require 'cgi'
 require 'date'
 require 'digest/sha1'
 require 'openssl'
+require 'securerandom'
 require 'uri'
 
 require 'jwt'
@@ -74,6 +75,8 @@ class LetsAuth < Sinatra::Application
 
   route :get, :post, '/auth' do
     # See: http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
+
+    # For v1, rate limit this API so we can't be used to spam people
 
     unless params[:scope].class == String && params[:scope].split(' ').include?('openid')
       halt 422, '"scope" parameter must be present and include "openid"'
@@ -196,12 +199,12 @@ class LetsAuth < Sinatra::Application
   end
 
   def gen_code()
-    # For v1, we'll want to use a real CSPRNG and such.
+    # For v1, we'll want to make an explicit decision re: entropy
     # We'll also want to calculate the entropy of each code.
     # Lastly, thanks Stack Overflow:
     # http://stackoverflow.com/questions/88311/how-best-to-generate-a-random-string-in-ruby#answer-493230
     charset = %w{ 2 3 4 6 7 9 a c d e f g h j k m n p q r t v w x y z }
-    (0...6).map { charset.to_a[rand(charset.size)] }.join
+    (0...6).map { charset.to_a[SecureRandom.random_number(charset.size)] }.join
   end
 
   get '/confirm' do
