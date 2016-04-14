@@ -46,8 +46,23 @@ class LetsAuth < Sinatra::Application
     set :host, 'example.invalid'
     set :port, 443
 
-    # Note: From `heroku labs:enable runtime-dyno-metadata`
     set :host, "#{ENV['HEROKU_APP_NAME']}.herokuapp.com" if ENV['HEROKU_APP_NAME']
+
+    set :from, 'letsauth@dancallahan.info'
+
+    Pony.options = {
+      from: settings.from,
+      via: :smtp,
+      via_options: {
+        address: ENV['POSTMARK_SMTP_SERVER'],
+        port: 587,
+        enable_starttls_auto: true,
+        user_name: ENV['POSTMARK_API_KEY'],
+        password: ENV['POSTMARK_API_KEY'],
+        authentication: 'plain',
+        domain: settings.host
+      }
+    }
   end
 
   configure :development do
@@ -201,7 +216,7 @@ class LetsAuth < Sinatra::Application
   def send_link(who, where, what)
     message = Pony.mail(
       to: who,
-      from: "no-reply@#{settings.host}",
+      from: settings.from,
       subject: "Finish logging into #{where}",
       body: "Click this link to finish logging in:\n\n#{what}"
     )
