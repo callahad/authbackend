@@ -13,6 +13,7 @@ require 'uri'
 
 require 'jwt'
 require 'mock_redis'
+require 'redis'
 require 'pony'
 require 'sinatra/base'
 require 'sinatra/json'
@@ -23,7 +24,11 @@ class LetsAuth < Sinatra::Application
   register Sinatra::MultiRoute
 
   configure do
-    set :redis, MockRedis.new
+    if ENV['REDIS_URL'] then
+      set :redis, Redis.new(url: ENV['REDIS_URL'])
+    else
+      set :redis, MockRedis.new
+    end
 
     if ENV['LETSAUTH_PRIVATE_KEY'] then
       puts 'Loading keypair from environment...'
@@ -47,9 +52,11 @@ class LetsAuth < Sinatra::Application
 
   configure :development do
     register Sinatra::Reloader
+
     set :scheme, 'http'
     set :host, '127.0.0.1'
     set :port, 9292
+
     Pony.override_options = { :via => :test }
   end
 
