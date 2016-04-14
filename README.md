@@ -162,6 +162,21 @@ Complete an authentication request:
 In development mode, the generated emails will be printed to the console where
 `rackup` is running.
 
+## Running on Heroku
+
+For prototyping, there are a few hard-coded dependencies on Heroku, primarily
+around configuring domain names and email. These will be removed before v1.
+
+To get set up, make sure to run the following commands:
+
+    heroku labs:enable runtime-dyno-metadata
+    heroku addons:create heroku-redis:hobby-dev
+    heroku addons:create postmark:10k
+    heroku config:set LETSAUTH_PRIVATE_KEY='...' # In PEM format
+
+You'll also need to confirm your sending address in the Postmark's settings, and
+update the `:from` address in `server.rb` to match.
+
 [jwt-spec]: https://tools.ietf.org/html/rfc7519
 [jwt-io]: https://jwt.io
 [oauth2]: http://tools.ietf.org/html/rfc6749
