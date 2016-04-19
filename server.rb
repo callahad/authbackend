@@ -88,6 +88,8 @@ class LetsAuth < Sinatra::Application
     set :port, 9292
 
     Pony.override_options = { :via => :test }
+
+    set :protection, :except => :frame_options
   end
 
   get '/' do
