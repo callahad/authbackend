@@ -14,6 +14,8 @@ require 'uri'
 require 'jwt'
 require 'mock_redis'
 require 'redis'
+require 'omniauth'
+require 'omniauth-google-oauth2'
 require 'pony'
 require 'sinatra/base'
 require 'sinatra/json'
@@ -24,6 +26,16 @@ class LetsAuth < Sinatra::Application
   register Sinatra::MultiRoute
 
   configure do
+    enable :sessions
+
+    OmniAuth.config.failure_raise_out_environments = []
+
+    use OmniAuth::Builder do
+      provider :google_oauth2,
+        ENV['GOOGLE_CLIENT_ID'], ENV['GOOGLE_CLIENT_SECRET'],
+        { prompt: 'consent', access_type: 'online' }
+    end
+
     if ENV['REDIS_URL'] then
       set :redis, Redis.new(url: ENV['REDIS_URL'])
     else
@@ -137,14 +149,33 @@ class LetsAuth < Sinatra::Application
       halt 501, 'authentication without a "login_hint" is not yet supported'
     end
 
-    confirmation_url = stage(
-      params[:login_hint], params[:client_id], params[:redirect_uri],
-      nonce: params[:nonce], state: params[:state]
-    )
+    if params[:login_hint].end_with? '@gmail.com'
+      # FIXME: Ugly hack; only allows a single in-flight Gmail auth per user
+      #
+      # For traditional email loop confirmations, we embed the "email:rp" pair
+      # right in the link parameters. To get the same from Google, we'll need
+      # to round-trip the rp's origin in a "nonce" parameter that we send.
+      #
+      # However, the Omniauth Google OAuth2 strategy, in addition to requiring
+      # Contacts and G+ API entitlements, doesn't support sending nonces.
+      #
+      # Find or craft a better lib for v1.
+      stage(
+        params[:login_hint], 'GOOGLE_OAUTH2', params[:redirect_uri],
+        nonce: params[:nonce], state: params[:state]
+      )
 
-    send_link(params[:login_hint], params[:client_id], confirmation_url)
+      return redirect "/auth/google_oauth2?login_hint=#{params[:login_hint]}"
+    else
+      confirmation_url = stage(
+        params[:login_hint], params[:client_id], params[:redirect_uri],
+        nonce: params[:nonce], state: params[:state], generate_link: true
+      )
 
-    return 200, "Please check your email at #{params[:login_hint]}"
+      send_link(params[:login_hint], params[:client_id], confirmation_url)
+
+      return 200, "Please check your email at #{params[:login_hint]}"
+    end
   end
 
   def valid_origin?(client_id)
@@ -193,24 +224,31 @@ class LetsAuth < Sinatra::Application
 
     kv_array = []
     kv_array.push 'redirect', redirect
-    kv_array.push 'code', code
-    kv_array.push 'tries', 0
     kv_array.push 'nonce', options[:nonce] if options[:nonce]
     kv_array.push 'state', options[:state] if options[:state]
+
+    if options[:generate_link]
+      kv_array.push 'code', code
+      kv_array.push 'tries', 0
+    end
 
     redis.multi do
       redis.hmset key, *kv_array
       redis.expire key, 60 * 15
     end
 
-    builder = settings.scheme == 'http' ? URI::HTTP : URI::HTTPS
+    if options[:generate_link]
+      builder = settings.scheme == 'http' ? URI::HTTP : URI::HTTPS
 
-    builder.build(
-      host: settings.host,
-      port: settings.port,
-      path: '/confirm',
-      query: "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
-    ).to_s
+      return builder.build(
+        host: settings.host,
+        port: settings.port,
+        path: '/confirm',
+        query: "email=#{CGI::escape email}&origin=#{CGI::escape origin}&code=#{code}"
+      ).to_s
+    else 
+      return true
+    end
   end
 
   def send_link(who, where, what)
@@ -250,7 +288,7 @@ class LetsAuth < Sinatra::Application
       redis.hincrby key, 'tries', 1
     end
 
-    halt 401, 'Unknown or expired credentials' if data.empty?
+    halt 401, 'Unknown or expired credentials' if data['code'].nil?
     halt 401, 'Too many failed attempts' if (attempt > 3)
     halt 401, 'Incorrect code' unless data['code'] == params[:code].downcase
 
@@ -261,6 +299,44 @@ class LetsAuth < Sinatra::Application
     base_uri = data['redirect'] + '#id_token=' + id_token
     base_uri += '&state=' + data['state'] if data['state']
     redirect base_uri, 302
+  end
+
+  get '/auth/failure' do
+    # FIXME: Stash the RP origin in a session cookie so we can show an error
+    # page with a friendly "Return to ..." link.
+    'Login cancelled'
+  end
+
+  get '/auth/google_oauth2/callback' do
+    redis = settings.redis
+
+    email = request.env['omniauth.auth'].info.email
+
+    key = "#{email}:GOOGLE_OAUTH2"
+    data = redis.hgetall key
+
+    # TODO: Think about upgrade/downgrade paths and in-flight requests.
+    # What problems might arise from toggling Google on / off while running?
+    # E.g., Our Redis store might have state from the traditional email loop, or
+    # vice versa.
+    halt 401, 'No continuation available for this user' if data.empty?
+
+    redis.del key
+
+    id_token = build_id_token(email, extract_origin(data['redirect']), data['nonce'])
+
+    base_uri = data['redirect'] + '#id_token=' + id_token
+    base_uri += '&state=' + data['state'] if data['state']
+    redirect base_uri, 302
+  end
+
+  def extract_origin(uri)
+    u = URI.parse(uri)
+
+    origin = "#{u.scheme}://#{u.host}"
+    origin += ":#{u.port}" unless u.port == u.default_port
+
+    origin
   end
 
   def build_id_token(email, origin, nonce = nil)

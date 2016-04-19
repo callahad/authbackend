@@ -174,8 +174,33 @@ To get set up, make sure to run the following commands:
     heroku addons:create postmark:10k
     heroku config:set LETSAUTH_PRIVATE_KEY='...' # In PEM format
 
-You'll also need to confirm your sending address in the Postmark's settings, and
-update the `:from` address in `server.rb` to match.
+
+
+For mail sending to work, you must also:
+
+- Confirm your sending address in the Postmark's settings
+- Update the `:from` address in `server.rb` to match.
+
+For Google integration to work, you must also:
+
+- Register on [Google's API Manager](https://console.developers.google.com/apis/credentials)
+
+- Create an OAuth Client ID, populating the Authorized Redirect URIs with:
+
+    - `https://your-domain/auth/google_oauth2/callback` and/or
+    - `http://127.0.0.1:9292/auth/google_oauth2/callback`
+
+- Configure environment variables:
+
+        heroku config:set GOOGLE_CLIENT_ID='...'
+        heroku config:set GOOGLE_CLIENT_SECRET='...'
+
+- Enable both the Contacts and Google+ APIs
+
+    - This is due to a limitation in the Omniauth Google OAuth 2 gem; it won't
+      be needed in the future.
+
+
 
 [jwt-spec]: https://tools.ietf.org/html/rfc7519
 [jwt-io]: https://jwt.io
