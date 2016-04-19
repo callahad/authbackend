@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Let's Auth</title>
+  </head>
+  <body>
+    <p>Please check your email at <%= email %></p>
+    <p>You can click the link in your email, or enter your login code below:</p>
+    <form action="/confirm" method=get>
+        <input type=hidden name=email value="<%= email %>" />
+        <input type=hidden name=origin value="<%= origin %>" />
+        <input type=text name=code placeholder="Code..." />
+        <input type=submit value=Submit />
+    </form>
+  </body>
+</html>

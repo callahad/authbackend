@@ -21,12 +21,15 @@ require 'sinatra/base'
 require 'sinatra/json'
 require 'sinatra/multi_route'
 require 'sinatra/reloader'
+require 'tilt/erb'
 
 class LetsAuth < Sinatra::Application
   register Sinatra::MultiRoute
 
   configure do
     enable :sessions
+
+    set :views, File.dirname(__FILE__) + '/views'
 
     OmniAuth.config.failure_raise_out_environments = []
 
@@ -174,7 +177,10 @@ class LetsAuth < Sinatra::Application
 
       send_link(params[:login_hint], params[:client_id], confirmation_url)
 
-      return 200, "Please check your email at #{params[:login_hint]}"
+      return erb :auth, { locals: {
+        email: params[:login_hint],
+        origin: params[:client_id],
+      } }
     end
   end
 
@@ -252,11 +258,13 @@ class LetsAuth < Sinatra::Application
   end
 
   def send_link(who, where, what)
+    code = CGI.parse(URI.parse(what).query)['code'].first
+
     message = Pony.mail(
       to: who,
       from: settings.from,
-      subject: "Finish logging into #{where}",
-      body: "Click this link to finish logging in:\n\n#{what}"
+      subject: "Code: #{code} - Finish logging into #{where}",
+      body: "Enter your login code:\n\n    #{code}\n\nOr click this link to finish logging in:\n\n    #{what}"
     )
 
     puts '-----BEGIN EMAIL MESSAGE-----'
