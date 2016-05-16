@@ -18,9 +18,9 @@ website.
     | Website | <-----------> | Let's Auth | <-------------------+
     +---------+    Connect    +------------+                      \
                                      |                             \
-                                     | Open ID Connect   +-------------------+
-                                     +-----------------> |  OpenID Provider  |
-                                       (Unimplemented)   +-------------------+
+                                     | Open ID Connect    +-------------------+
+                                     +----------------->  |  OpenID Provider  |
+                                    (For now, only Gmail) +-------------------+
 
 ## HTTP Routes
 
@@ -55,7 +55,7 @@ ask Let's Auth to authenticate a user, then receive and validate the response.
     - `response_type=id_token`
     - `client_id=http://example.com`, where `http://example.com` is your
         website's address, including only the scheme, host, and any non-default
-        port. This must match the `Origin` header sent by the user's browser.
+        port.
     - `redirect_uri=http://example.com/login`, where `http://example.com/login`
         is the full URI where you would like to receive the user's credentials.
         This must have the same scheme, host, and port as the `client_id`.
@@ -174,8 +174,6 @@ To get set up, make sure to run the following commands:
     heroku addons:create postmark:10k
     heroku config:set LETSAUTH_PRIVATE_KEY='...' # In PEM format
 
-
-
 For mail sending to work, you must also:
 
 - Confirm your sending address in the Postmark's settings
@@ -199,8 +197,6 @@ For Google integration to work, you must also:
 
     - This is due to a limitation in the Omniauth Google OAuth 2 gem; it won't
       be needed in the future.
-
-
 
 [jwt-spec]: https://tools.ietf.org/html/rfc7519
 [jwt-io]: https://jwt.io
