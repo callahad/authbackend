@@ -10,7 +10,7 @@
     <form action="/confirm" method=get>
         <input type=hidden name=email value="<%= email %>" />
         <input type=hidden name=origin value="<%= origin %>" />
-        <input type=text name=code placeholder="Code..." />
+        <input type=text name=code placeholder="Code..." autocomplete="off" />
         <input type=submit value=Submit />
     </form>
   </body>
