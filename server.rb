@@ -106,7 +106,7 @@ class LetsAuth < Sinatra::Application
       scopes_supported:         %w{ openid email },
       claims_supported:         %w{ aud email email_verified exp iat iss sub },
       response_types_supported: %w{ id_token },
-      response_modes_supported: %w{ fragment },
+      response_modes_supported: %w{ form_post },
       grant_types_supported:    %w{ implicit },
       subject_types_supported:  %w{ public },
       id_token_signing_alg_values_supported: %w{ RS256 },
@@ -166,6 +166,7 @@ class LetsAuth < Sinatra::Application
       #
       # Find or craft a better lib for v1.
       stage(
+        # FIXME: Normalize the login_hint in a gmail-specific manner
         params[:login_hint], 'GOOGLE_OAUTH2', params[:redirect_uri],
         nonce: params[:nonce], state: params[:state]
       )
@@ -173,6 +174,7 @@ class LetsAuth < Sinatra::Application
       return redirect "/auth/google_oauth2?login_hint=#{params[:login_hint]}"
     else
       confirmation_url = stage(
+        # FIXME: Normalize the login_hint
         params[:login_hint], params[:client_id], params[:redirect_uri],
         nonce: params[:nonce], state: params[:state], generate_link: true
       )
@@ -231,6 +233,7 @@ class LetsAuth < Sinatra::Application
 
     code = gen_code()
 
+    # FIXME: Normalize the email address
     key = "#{email}:#{origin}"
 
     kv_array = []
@@ -309,9 +312,11 @@ class LetsAuth < Sinatra::Application
 
     id_token = build_id_token(params[:email], params[:origin], data['nonce'])
 
-    base_uri = data['redirect'] + '#id_token=' + id_token
-    base_uri += '&state=' + data['state'] if data['state']
-    redirect base_uri, 302
+    return erb :forward, { locals: {
+      return_uri: data['redirect'],
+      id_token: id_token,
+      state: data['state'],
+    } }
   end
 
   get '/auth/failure' do
@@ -325,6 +330,7 @@ class LetsAuth < Sinatra::Application
 
     email = request.env['omniauth.auth'].info.email
 
+    # FIXME: Normalize the email address in a gmail-specific manner
     key = "#{email}:GOOGLE_OAUTH2"
     data = redis.hgetall key
 
@@ -338,9 +344,11 @@ class LetsAuth < Sinatra::Application
 
     id_token = build_id_token(email, extract_origin(data['redirect']), data['nonce'])
 
-    base_uri = data['redirect'] + '#id_token=' + id_token
-    base_uri += '&state=' + data['state'] if data['state']
-    redirect base_uri, 302
+    return erb :forward, { locals: {
+      return_uri: data['redirect'],
+      id_token: id_token,
+      state: data['state'],
+    } }
   end
 
   def extract_origin(uri)

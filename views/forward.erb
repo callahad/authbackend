@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Let's Auth</title>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('form').submit();
+      });
+    </script>
+  </head>
+  <body>
+    <%# TODO: Audit for potential XSS %>
+    <form id="form" action="<%= return_uri %>" method=post>
+      <input type=hidden name=id_token value="<%= id_token %>" />
+      <% if state %>
+      <input type=hidden name=state value="<%= state %>" />
+      <% end %>
+    </form>
+  </body>
+</html>
