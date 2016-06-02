@@ -367,7 +367,7 @@ class LetsAuth < Sinatra::Application
     payload = {
       aud: origin,
       email: email,
-      email_verified: email,
+      email_verified: true,
       exp: now + validity,
       iat: now,
       iss: "#{settings.scheme}://#{settings.host}",
